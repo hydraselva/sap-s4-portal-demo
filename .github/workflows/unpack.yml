@@ -1,0 +1,21 @@
+name: unpack-demo
+on:
+  push:
+    paths: ['.github/workflows/unpack.yml']
+permissions:
+  contents: write
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unzip project into repo root and remove the zip
+        run: |
+          unzip -q sap-s4-portal-demo.zip -d /tmp/x
+          cp -r /tmp/x/sap-s4-portal-demo/. .
+          git rm -q sap-s4-portal-demo.zip .github/workflows/unpack.yml
+          git config user.name "hydraselva"
+          git config user.email "hydraselva@users.noreply.github.com"
+          git add -A
+          git commit -m "Add SAP S/4HANA portal demo source code"
+          git push
