@@ -1,0 +1,39 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>{{ advice_no }}</title>
+<style>
+  @page{size:A4;margin:0}
+  body{margin:0;font:11px/1.45 "Segoe UI",Arial,sans-serif;color:#16202c}
+  .page{width:210mm;min-height:297mm;padding:16mm 15mm;box-sizing:border-box;display:flex;flex-direction:column}
+  .head{display:flex;justify-content:space-between;border-bottom:2.5px solid #0f5c6e;padding-bottom:10px}
+  h2{margin:18px 0 4px;font-size:16px;letter-spacing:.05em;text-transform:uppercase}
+  .box{border:1px solid #c9d2dc;padding:9px 11px;border-radius:3px;margin:12px 0}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th{background:#0f5c6e;color:#fff;text-align:left;padding:6px;font-weight:600}
+  td{padding:6px;border-bottom:1px solid #dfe5eb} .n{text-align:right;font-variant-numeric:tabular-nums}
+  tfoot td{font-weight:700;background:#f2f6f8;border-top:1.5px solid #0f5c6e}
+  .words{margin-top:10px;padding:7px 10px;background:#f2f6f8;border-left:3px solid #0f5c6e}
+  .sign{margin-top:auto;display:flex;justify-content:space-between;padding-top:30px}
+  .sign div{border-top:1px solid #16202c;width:200px;text-align:center;padding-top:4px;margin-top:45px}
+  .note{font-size:8.5px;color:#6b7785;margin-top:14px}
+</style></head>
+<body><div class="page">
+  <div class="head">
+    <div style="display:flex;gap:10px;align-items:center">
+      <svg width="36" height="36" viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#12809a"/><path d="M20 8 L32 31 H25.5 L20 20 L14.5 31 H8 Z" fill="#fff"/><circle cx="20" cy="27" r="2.6" fill="#ffd77a"/></svg>
+      <div><b style="font-size:15px">{{ S.company_name | upper }}</b><br><span style="color:#6b7785">Accounts Department · {{ S.company_email }}</span></div>
+    </div>
+    <div style="text-align:right"><b>{{ advice_no }}</b><br>{{ now.strftime('%d-%m-%Y') }}</div>
+  </div>
+  <h2>Payment Advice</h2>
+  <div class="box"><b>To: {{ party.name }}</b> (BP {{ party.bp }})<br>{{ party.lines | join(', ') }}<br>GSTIN: {{ party.gstin }}</div>
+  <p>Dear Sir / Madam,<br>We are releasing payment against the following invoices. Please acknowledge receipt.</p>
+  <table>
+    <thead><tr><th>#</th><th>SAP document</th><th>Invoice ref.</th><th>Description</th><th>Posted</th><th>Due</th><th class="n">Amount ₹</th></tr></thead>
+    <tbody>{% for i in items %}<tr><td>{{ loop.index }}</td><td>{{ i.doc }}</td><td>{{ i.ref }}</td><td>{{ i.text }}</td>
+      <td>{{ i.post_date }}</td><td>{{ i.due_date }}</td><td class="n">{{ (i.amount | abs) | inr }}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><td colspan="6">Total payable</td><td class="n">₹ {{ total | inr }}</td></tr></tfoot>
+  </table>
+  <div class="words"><b>Amount in words:</b> {{ words }}</div>
+  <div class="sign"><div>Prepared by<br>{{ user.name }}</div><div>For {{ S.company_name }}<br>Authorised signatory</div></div>
+  <div class="note">System-generated from SAP S/4HANA journal entry items · {{ now.strftime('%d-%m-%Y %H:%M') }}</div>
+</div></body></html>

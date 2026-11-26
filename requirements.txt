@@ -1,0 +1,5 @@
+flask>=3.0
+requests>=2.31
+playwright>=1.40      # PDF engine – run once: python -m playwright install chromium
+waitress>=3.0         # production WSGI server on Windows/Linux
+pytest>=8.0           # tests

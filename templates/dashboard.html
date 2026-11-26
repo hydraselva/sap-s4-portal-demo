@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Delivery Challan</h1>
+<p class="sub">Enter an SAP material document. The portal checks the movement type, reads plant, supplier,
+  product and PO data from S/4HANA, applies GST and produces a 4-copy challan.</p>
+
+<div class="card">
+  <form class="row" id="f">
+    <div><label for="doc">Material document</label>
+      <input id="doc" inputmode="numeric" maxlength="10" placeholder="e.g. 4900000102" style="width:220px"></div>
+    <button class="btn" id="go">Preview challan</button>
+    <a class="btn ghost" id="pdf" style="display:none">⬇ Download 4-copy PDF</a>
+  </form>
+  {% if samples %}
+  <div class="chips">Sample documents:
+    {% for s in samples %}<button type="button" class="chip" data-doc="{{ s }}">{{ s }}</button>{% endfor %}
+    <span>(303 · 541 intra-state · 541 inter-state · 161 return · 101 = blocked)</span>
+  </div>
+  {% endif %}
+  <div id="msg"></div>
+  <div class="meta" id="meta"></div>
+</div>
+
+<div class="preview-shell" id="shell" style="display:none"><div id="preview"></div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+async function preview(doc) {
+  $('msg').innerHTML = ''; $('meta').innerHTML = ''; $('pdf').style.display = 'none';
+  const go = $('go'); go.disabled = true; go.innerHTML = '<span class="spinner"></span> Reading SAP…';
+  const t0 = performance.now();
+  const j = await api('{{ url_for("dc_preview") }}', {doc});
+  go.disabled = false; go.textContent = 'Preview challan';
+  if (!j.ok) {
+    $('shell').style.display = 'none';
+    $('msg').innerHTML = `<div class="alert error" style="margin:16px 0 0">${esc(j.error)}</div>`; return;
+  }
+  const m = j.meta;
+  $('meta').innerHTML = [`Mvt ${m.mov}`, `${m.lines} line(s)`, m.tax_mode, `To: ${m.receiver}`,
+    `Grand total ₹ ${m.grand_total}`, `${Math.round(performance.now() - t0)} ms`]
+    .map(x => `<span class="tag">${esc(x)}</span>`).join('');
+  $('preview').innerHTML = j.html; $('shell').style.display = 'block';
+  $('pdf').href = `/dc/${encodeURIComponent(m.doc)}.pdf`; $('pdf').style.display = 'inline-flex';
+}
+$('f').onsubmit = e => { e.preventDefault(); const d = $('doc').value.trim(); if (d) preview(d); };
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => { $('doc').value = c.dataset.doc; preview(c.dataset.doc); });
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Admin</h1>
+<p class="sub">Users, roles and the SAP connection.</p>
+
+<div class="two">
+  <div class="card">
+    <b>SAP connection</b>
+    <table class="grid" style="margin:10px 0 14px">
+      <tr><td class="muted">Mode</td><td>{{ S.sap_mode | upper }}{% if S.sap_mode == 'mock' %} – built-in mock OData server{% endif %}</td></tr>
+      <tr><td class="muted">Base URL</td><td>{{ S.sap_base_url or '/mock-sap (in-process)' }}</td></tr>
+      <tr><td class="muted">Communication user</td><td>{{ S.sap_user }}</td></tr>
+      <tr><td class="muted">Plant → BP</td><td>{% for p, b in S.plant_to_bp.items() %}{{ p }} → {{ b }}{{ ', ' if not loop.last }}{% endfor %}</td></tr>
+    </table>
+    <button class="btn ghost" id="test">Test connection</button> <span id="tmsg" style="margin-left:8px"></span>
+    <p class="muted" style="font-size:12px;margin:12px 0 0">Credentials are read from <code>.env</code> and never stored in code or shown here.</p>
+  </div>
+  <div class="card">
+    <b>Add or update user</b>
+    <form method="post" action="{{ url_for('admin_save_user') }}" style="margin-top:10px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="row">
+        <div><label>Username</label><input name="username" required style="width:150px"></div>
+        <div><label>Full name</label><input name="name" style="width:180px"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Role</label><select name="role">{% for k, v in ROLES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+        <div><label>Password (blank = keep)</label><input name="password" type="password" minlength="8" style="width:180px"></div>
+        <label style="display:flex;gap:6px;align-items:center;margin:0 0 10px"><input type="checkbox" name="active" value="1" checked> Active</label>
+        <button class="btn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <table class="grid">
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for u, d in users.items() %}
+      <tr><td><b>{{ u }}</b></td><td>{{ d.name }}</td><td>{{ ROLES[d.role] }}</td>
+        <td><span class="tag {{ 'clr' if d.active else 'open' }}">{{ 'Active' if d.active else 'Disabled' }}</span></td>
+        <td class="right">{% if u != user.username %}
+          <form method="post" action="{{ url_for('admin_delete_user', username=u) }}" onsubmit="return confirm('Delete {{ u }}?')" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn danger">Delete</button></form>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('test').onclick = async () => {
+  const m = document.getElementById('tmsg'); m.textContent = 'Testing…';
+  const j = await api('{{ url_for("admin_test_connection") }}', {});
+  m.innerHTML = `<span style="color:${j.ok ? 'var(--ok)' : 'var(--err)'}">${esc(j.msg || j.error)}</span>`;
+};
+</script>
+{% endblock %}

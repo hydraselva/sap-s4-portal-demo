@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}{{ S.company_short }} SAP Portal{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='logo.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+{% block shell %}
+<header class="topbar">
+  <div class="brand"><img src="{{ url_for('static', filename='logo.svg') }}" width="28" height="28" alt="">
+    {{ S.company_short }} <small>SAP S/4HANA Portal</small></div>
+  <nav class="nav">
+    {% set p = request.path %}
+    {% if user.role in ('operator','admin') %}<a href="{{ url_for('dashboard') }}" class="{{ 'on' if p == '/' }}">Delivery Challan</a>{% endif %}
+    {% if user.role in ('accounts','admin') %}<a href="{{ url_for('finance') }}" class="{{ 'on' if p.startswith('/finance') }}">Finance</a>{% endif %}
+    {% if user.role == 'admin' %}<a href="{{ url_for('admin') }}" class="{{ 'on' if p.startswith('/admin') }}">Admin</a>{% endif %}
+  </nav>
+  <div class="who">
+    <span class="pill {{ 'mode-mock' if S.sap_mode == 'mock' }}">SAP: {{ S.sap_mode }}</span>
+    {{ user.name }} · {{ ROLES[user.role] }}
+    <a href="{{ url_for('logout') }}" style="color:#c9d4df">Sign out</a>
+  </div>
+</header>
+<main class="wrap">
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+{% endblock %}
+<script>
+const CSRF = document.querySelector('meta[name=csrf-token]').content;
+async function api(url, body) {
+  const r = await fetch(url, body === undefined ? {} : {
+    method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF},
+    body: JSON.stringify(body)});
+  const j = await r.json().catch(() => ({ok: false, error: 'Server returned HTTP ' + r.status}));
+  if (!r.ok && j.ok === undefined) j.ok = false;
+  return j;
+}
+const inr = n => Number(n || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

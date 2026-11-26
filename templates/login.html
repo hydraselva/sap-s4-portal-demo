@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Sign in · {{ S.company_short }} SAP Portal{% endblock %}
+{% block shell %}
+<div class="login-page">
+  <form class="login-card" method="post">
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:22px">
+      <img src="{{ url_for('static', filename='logo.svg') }}" width="40" height="40" alt="">
+      <div><div style="font-weight:700;letter-spacing:.06em">{{ S.company_name }}</div>
+        <div class="muted" style="font-size:12.5px">SAP S/4HANA integration portal</div></div>
+    </div>
+    {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}
+    <label for="u">Username</label><input id="u" name="username" autocomplete="username" autofocus required>
+    <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
+    <button class="btn" style="width:100%;justify-content:center">Sign in</button>
+    {% if S.sap_mode == 'mock' %}
+    <p class="muted" style="font-size:12px;margin:18px 0 0">Demo mode · try <b>admin / Admin@demo1</b>,
+      <b>stores / Stores@demo1</b> or <b>accounts / Accounts@demo1</b></p>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

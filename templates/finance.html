@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Finance</h1>
+<p class="sub">Supplier and customer open items from SAP journal entries, ageing, payment advice and trial balance.</p>
+
+<div class="card">
+  <form class="row" id="f">
+    <div><label for="from">Posting date from</label><input type="date" id="from"></div>
+    <div><label for="to">to</label><input type="date" id="to"></div>
+    <div class="ac" style="width:320px"><label for="party">Business partner (code or name)</label>
+      <input id="party" placeholder="All partners" autocomplete="off" style="width:100%">
+      <div class="ac-list" id="ac"></div></div>
+    <button class="btn" id="go">Load from SAP</button>
+    <button type="button" class="btn ghost" id="clear">Clear</button>
+  </form>
+  <div id="msg"></div>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="two">
+  <div class="card"><b>Open-item ageing</b> <span class="muted">(by net due date)</span>
+    <div class="bars" id="bars"><div class="empty">Load data to see ageing.</div></div></div>
+  <div class="card"><b>Payment advice</b>
+    <p class="muted" style="margin:6px 0 12px">Pick one supplier above, tick its open items below, then create a PDF advice.</p>
+    <form method="post" action="{{ url_for('payment_advice') }}" id="pa">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="party" id="pa-party">
+      <div id="pa-sel" class="muted">No items selected.</div>
+      <button class="btn" style="margin-top:12px" id="pa-btn" disabled>Create payment advice PDF</button>
+    </form></div>
+</div>
+
+<div class="tabs"><button class="on" data-tab="items">Line items</button><button data-tab="tb">Trial balance</button></div>
+<div class="card" style="border-top-left-radius:0;border-top-right-radius:0">
+  <div id="items" class="scroll"><div class="empty">No data loaded.</div></div>
+  <div id="tb" class="scroll" style="display:none"><div class="empty">Loading…</div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+const BUCKETS = {{ buckets | tojson }};
+let partyCode = '', items = [];
+
+// default range: last 6 months
+const d = new Date(); $('to').value = d.toISOString().slice(0, 10);
+d.setMonth(d.getMonth() - 6); $('from').value = d.toISOString().slice(0, 10);
+
+// ── partner autocomplete ──
+let t;
+$('party').oninput = () => {
+  partyCode = ''; clearTimeout(t);
+  const q = $('party').value.trim();
+  if (q.length < 2) { $('ac').style.display = 'none'; return; }
+  t = setTimeout(async () => {
+    const j = await api('/api/finance/parties?q=' + encodeURIComponent(q));
+    $('ac').innerHTML = (j.results || []).map(r =>
+      `<div data-code="${esc(r.code)}" data-name="${esc(r.name)}">${esc(r.code)} – ${esc(r.name)}</div>`).join('')
+      || '<div class="muted">No match</div>';
+    $('ac').style.display = 'block';
+  }, 250);
+};
+$('ac').onclick = e => {
+  const el = e.target.closest('[data-code]'); if (!el) return;
+  partyCode = el.dataset.code; $('party').value = `${el.dataset.code} – ${el.dataset.name}`;
+  $('ac').style.display = 'none';
+};
+document.addEventListener('click', e => { if (!e.target.closest('.ac')) $('ac').style.display = 'none'; });
+$('clear').onclick = () => { $('party').value = ''; partyCode = ''; load(); };
+
+// ── load ──
+async function load() {
+  const go = $('go'); go.disabled = true; go.innerHTML = '<span class="spinner"></span> Loading…';
+  const j = await api('{{ url_for("finance_summary") }}', {date_from: $('from').value, date_to: $('to').value, party: partyCode});
+  go.disabled = false; go.textContent = 'Load from SAP';
+  $('msg').innerHTML = j.ok ? '' : `<div class="alert error" style="margin:14px 0 0">${esc(j.error)}</div>`;
+  if (!j.ok) return;
+  items = j.items; const s = j.summary;
+  $('stats').innerHTML = [['Line items', items.length.toLocaleString('en-IN')], ['Open items', s.open_count],
+    ['Open payables ₹', inr(s.open_payable)], ['Open receivables ₹', inr(s.open_receivable)]]
+    .map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  const max = Math.max(...BUCKETS.map(([k]) => s.ageing[k]), 1);
+  $('bars').innerHTML = BUCKETS.map(([k, label], i) =>
+    `<div class="bar ${['', '', 'late', 'later', 'worst'][i]}"><span>${label}</span>
+     <div class="track"><div class="fill" style="width:${(s.ageing[k] / max * 100).toFixed(1)}%"></div></div>
+     <span class="right">₹ ${inr(s.ageing[k])}</span></div>`).join('');
+  const canPay = partyCode && items.length && items[0].party_type === 'Supplier';
+  $('items').innerHTML = items.length ? `<table class="grid"><thead><tr>${canPay ? '<th></th>' : ''}
+    <th>Doc</th><th>Posted</th><th>Due</th><th>Partner</th><th>Reference / text</th><th class="n">Amount ₹</th><th>Status</th></tr></thead><tbody>
+    ${items.map(i => `<tr>${canPay ? `<td>${i.cleared ? '' : `<input type="checkbox" class="pick" value="${esc(i.doc)}" data-amt="${Math.abs(i.amount)}">`}</td>` : ''}
+      <td>${esc(i.doc)}</td><td>${esc(i.post_date)}</td><td>${esc(i.due_date)}</td>
+      <td>${esc(i.party_name)}<div class="muted" style="font-size:11.5px">${esc(i.party)} · ${esc(i.party_type)}</div></td>
+      <td>${esc(i.ref)}<div class="muted" style="font-size:11.5px">${esc(i.text)}</div></td>
+      <td class="n">${inr(i.amount)}</td>
+      <td><span class="tag ${i.cleared ? 'clr' : 'open'}">${i.cleared ? 'Cleared' : 'Open'}</span></td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No line items for this selection.</div>';
+  $('pa-party').value = canPay ? partyCode : '';
+  document.querySelectorAll('.pick').forEach(c => c.onchange = updatePA); updatePA();
+}
+function updatePA() {
+  const picked = [...document.querySelectorAll('.pick:checked')];
+  document.querySelectorAll('#pa input[name=docs]').forEach(x => x.remove());
+  picked.forEach(c => $('pa').insertAdjacentHTML('beforeend', `<input type="hidden" name="docs" value="${esc(c.value)}">`));
+  const total = picked.reduce((a, c) => a + Number(c.dataset.amt), 0);
+  $('pa-sel').textContent = picked.length ? `${picked.length} item(s) · ₹ ${inr(total)}`
+    : ($('pa-party').value ? 'Tick open items in the table below.' : 'Select a supplier to enable payment advice.');
+  $('pa-btn').disabled = !picked.length;
+}
+$('f').onsubmit = e => { e.preventDefault(); load(); };
+
+// ── tabs + trial balance ──
+let tbLoaded = false;
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = async () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  $('items').style.display = b.dataset.tab === 'items' ? '' : 'none';
+  $('tb').style.display = b.dataset.tab === 'tb' ? '' : 'none';
+  if (b.dataset.tab === 'tb' && !tbLoaded) {
+    const j = await api('{{ url_for("finance_tb") }}'); tbLoaded = j.ok;
+    $('tb').innerHTML = !j.ok ? `<div class="alert error">${esc(j.error)}</div>` :
+      `<table class="grid"><thead><tr><th>G/L account</th><th>Name</th><th class="n">Debit ₹</th><th class="n">Credit ₹</th><th class="n">Balance ₹</th></tr></thead><tbody>
+      ${j.rows.map(r => `<tr><td>${esc(r.gl)}</td><td>${esc(r.name)}</td><td class="n">${inr(r.debit)}</td><td class="n">${inr(r.credit)}</td><td class="n">${inr(r.balance)}</td></tr>`).join('')}
+      <tr><td colspan="2"><b>Total</b></td><td class="n"><b>${inr(j.total_debit)}</b></td><td class="n"><b>${inr(j.total_credit)}</b></td>
+      <td class="n"><b>${inr(j.total_debit - j.total_credit)}</b></td></tr></tbody></table>`;
+  }
+});
+load();
+</script>
+{% endblock %}
